@@ -27,9 +27,17 @@ jobs:
     runs-on: ubuntu-latest
     name: Запуск UI тестов
     
+    # Даем разрешения для записи в Pages
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
     steps:
       - name: Checkout кода
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Установка Python
         uses: actions/setup-python@v5
@@ -68,22 +76,22 @@ jobs:
         continue-on-error: true
       
       - name: Получить историю Allure (если существует)
-        uses: actions/checkout@v4
-        if: always()
-        continue-on-error: true
-        with:
-          ref: gh-pages
-          path: gh-pages
-      
-      - name: Скопировать историю Allure
         if: always()
         continue-on-error: true
         run: |
-          if [ -d "gh-pages/allure-history" ]; then
-            echo "История найдена, копируем..."
-            cp -r gh-pages/allure-history allure-results/history
+          if git ls-remote --exit-code --heads origin gh-pages; then
+            echo "Ветка gh-pages существует, получаем историю..."
+            git fetch origin gh-pages
+            git checkout gh-pages
+            if [ -d "allure-history" ]; then
+              cp -r allure-history /tmp/allure-history
+            fi
+            git checkout -
+            if [ -d "/tmp/allure-history" ]; then
+              cp -r /tmp/allure-history allure-results/history
+            fi
           else
-            echo "История не найдена, это первый запуск"
+            echo "Ветка gh-pages не существует, это первый запуск"
           fi
       
       - name: Сгенерировать Allure отчет
@@ -94,14 +102,21 @@ jobs:
           allure_history: allure-history
           keep_reports: 20
       
+      - name: Создать .nojekyll файл
+        if: always()
+        run: |
+          touch allure-history/.nojekyll
+      
       - name: Опубликовать отчет на GitHub Pages
         if: always()
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: allure-history
-          force_orphan: true
+        run: |
+          cd allure-history
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Deploy Allure report - run #${{ github.run_number }}"
+          git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:gh-pages
       
       - name: Получить имя репозитория
         if: always()
@@ -111,24 +126,38 @@ jobs:
       - name: Добавить ссылку на отчет в Summary
         if: always()
         run: |
-          echo "## 📊 Allure отчет" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Allure отчет опубликован! ✅" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Отчет будет доступен через несколько минут по ссылке:" >> $GITHUB_STEP_SUMMARY
-          echo "🔗 https://${{ github.repository_owner }}.github.io/${{ steps.repo_name.outputs.REPO_NAME }}/" >> $GITHUB_STEP_SUMMARY
+          echo "Отчет будет доступен через 1-2 минуты по ссылке:" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 https://${{ github.repository_owner }}.github.io/${{ steps.repo_name.outputs.REPO_NAME }}/" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> 💡 **Важно:** Если это первый запуск, убедитесь что GitHub Pages включен в настройках репозитория:" >> $GITHUB_STEP_SUMMARY
-          echo "> Settings → Pages → Source: Deploy from a branch → Branch: gh-pages" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 **Первый запуск?** Включите GitHub Pages:" >> $GITHUB_STEP_SUMMARY
+          echo "> 1. Перейдите в **Settings → Pages**" >> $GITHUB_STEP_SUMMARY
+          echo "> 2. Source: **Deploy from a branch**" >> $GITHUB_STEP_SUMMARY
+          echo "> 3. Branch: **gh-pages** → **/ (root)**" >> $GITHUB_STEP_SUMMARY
+          echo "> 4. Нажмите **Save**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Параметры запуска:" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Параметры запуска:" >> $GITHUB_STEP_SUMMARY
           echo "- 🌐 URL: ${{ inputs.test_url }}" >> $GITHUB_STEP_SUMMARY
           echo "- 🌍 Браузер: ${{ inputs.browser }}" >> $GITHUB_STEP_SUMMARY
           echo "- 📁 Тесты: ${{ inputs.test_path }}" >> $GITHUB_STEP_SUMMARY
           echo "- 🔢 Запуск №: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Артефакты:" >> $GITHUB_STEP_SUMMARY
+          echo "Результаты также сохранены в артефактах (см. выше)" >> $GITHUB_STEP_SUMMARY
       
       - name: Загрузить Allure results как артефакт
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: allure-results
+          name: allure-results-${{ github.run_number }}
           path: allure-results
+          retention-days: 30
+      
+      - name: Загрузить Allure report как артефакт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report-${{ github.run_number }}
+          path: allure-history
           retention-days: 30
