@@ -39,6 +39,11 @@ htmlcov/
 reports/
 *.log
 
+# Allure
+allure-results/
+allure-report/
+.allure/
+
 # Environment variables
 .env
 

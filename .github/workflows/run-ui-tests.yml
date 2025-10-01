@@ -1,0 +1,121 @@
+name: UI Tests with Allure Report
+
+on:
+  # Ручной запуск из интерфейса GitHub
+  workflow_dispatch:
+    inputs:
+      test_url:
+        description: 'URL для тестирования'
+        required: true
+        default: 'https://construction-supervision.alex-fisher-dev.ru/'
+        type: string
+      browser:
+        description: 'Браузер для тестов'
+        required: true
+        default: 'chrome'
+        type: choice
+        options:
+          - chrome
+          - firefox
+      test_path:
+        description: 'Путь к тестам (оставьте пустым для всех тестов)'
+        required: false
+        default: 'tests/'
+        type: string
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Запуск UI тестов
+    
+    steps:
+      - name: Checkout кода
+        uses: actions/checkout@v4
+      
+      - name: Установка Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Установка зависимостей
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+      
+      - name: Установка Chrome
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+      
+      - name: Установка ChromeDriver
+        uses: nanasess/setup-chromedriver@v2
+      
+      - name: Проверка версий
+        run: |
+          python3 --version
+          pip3 --version
+          google-chrome --version
+          chromedriver --version
+      
+      - name: Запуск тестов с Allure
+        env:
+          TEST_URL: ${{ inputs.test_url }}
+        run: |
+          pytest ${{ inputs.test_path }} \
+            -v \
+            --alluredir=allure-results \
+            --clean-alluredir
+        continue-on-error: true
+      
+      - name: Получить историю Allure
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+      
+      - name: Скопировать историю Allure
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -d "gh-pages/allure-history" ]; then
+            cp -r gh-pages/allure-history allure-results/history
+          fi
+      
+      - name: Сгенерировать Allure отчет
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: allure-results
+          allure_history: allure-history
+          keep_reports: 20
+      
+      - name: Опубликовать отчет на GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+      
+      - name: Добавить ссылку на отчет в Summary
+        if: always()
+        run: |
+          echo "## 📊 Allure отчет" >> $GITHUB_STEP_SUMMARY
+          echo "Отчет доступен по ссылке:" >> $GITHUB_STEP_SUMMARY
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Параметры запуска:" >> $GITHUB_STEP_SUMMARY
+          echo "- URL: ${{ inputs.test_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Браузер: ${{ inputs.browser }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Тесты: ${{ inputs.test_path }}" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Загрузить Allure results как артефакт
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+          retention-days: 30
