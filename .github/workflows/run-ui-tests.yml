@@ -1,6 +1,7 @@
 name: UI Tests with Allure Report
 
 on:
+  # Ручной запуск из интерфейса GitHub
   workflow_dispatch:
     inputs:
       test_url:
@@ -27,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Запуск UI тестов
     
-    # Даем разрешения для записи в Pages
+    # Даем разрешения для записи
     permissions:
       contents: write
       pages: write
@@ -102,10 +103,12 @@ jobs:
           allure_history: allure-history
           keep_reports: 20
       
-      - name: Создать .nojekyll файл
+      - name: Исправить права доступа и создать .nojekyll
         if: always()
         run: |
+          sudo chown -R $USER:$USER allure-history
           touch allure-history/.nojekyll
+          echo "Файл .nojekyll создан успешно"
       
       - name: Опубликовать отчет на GitHub Pages
         if: always()
@@ -114,7 +117,7 @@ jobs:
           git init
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add -A
           git commit -m "Deploy Allure report - run #${{ github.run_number }}"
           git push --force https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:gh-pages
       
@@ -144,7 +147,7 @@ jobs:
           echo "- 🔢 Запуск №: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Артефакты:" >> $GITHUB_STEP_SUMMARY
-          echo "Результаты также сохранены в артефактах (см. выше)" >> $GITHUB_STEP_SUMMARY
+          echo "Результаты также сохранены в артефактах ниже" >> $GITHUB_STEP_SUMMARY
       
       - name: Загрузить Allure results как артефакт
         if: always()
