@@ -1,7 +1,6 @@
 name: UI Tests with Allure Report
 
 on:
-  # Ручной запуск из интерфейса GitHub
   workflow_dispatch:
     inputs:
       test_url:
@@ -68,7 +67,7 @@ jobs:
             --clean-alluredir
         continue-on-error: true
       
-      - name: Получить историю Allure
+      - name: Получить историю Allure (если существует)
         uses: actions/checkout@v4
         if: always()
         continue-on-error: true
@@ -81,7 +80,10 @@ jobs:
         continue-on-error: true
         run: |
           if [ -d "gh-pages/allure-history" ]; then
+            echo "История найдена, копируем..."
             cp -r gh-pages/allure-history allure-results/history
+          else
+            echo "История не найдена, это первый запуск"
           fi
       
       - name: Сгенерировать Allure отчет
@@ -99,18 +101,29 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+          force_orphan: true
+      
+      - name: Получить имя репозитория
+        if: always()
+        id: repo_name
+        run: echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_OUTPUT
       
       - name: Добавить ссылку на отчет в Summary
         if: always()
         run: |
           echo "## 📊 Allure отчет" >> $GITHUB_STEP_SUMMARY
-          echo "Отчет доступен по ссылке:" >> $GITHUB_STEP_SUMMARY
-          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Отчет будет доступен через несколько минут по ссылке:" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 https://${{ github.repository_owner }}.github.io/${{ steps.repo_name.outputs.REPO_NAME }}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 💡 **Важно:** Если это первый запуск, убедитесь что GitHub Pages включен в настройках репозитория:" >> $GITHUB_STEP_SUMMARY
+          echo "> Settings → Pages → Source: Deploy from a branch → Branch: gh-pages" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Параметры запуска:" >> $GITHUB_STEP_SUMMARY
-          echo "- URL: ${{ inputs.test_url }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Браузер: ${{ inputs.browser }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Тесты: ${{ inputs.test_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌐 URL: ${{ inputs.test_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🌍 Браузер: ${{ inputs.browser }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 📁 Тесты: ${{ inputs.test_path }}" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔢 Запуск №: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
       
       - name: Загрузить Allure results как артефакт
         if: always()
